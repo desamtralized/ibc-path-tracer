@@ -1,0 +1,77 @@
+[chains.neutron]
+name = "Neutron"
+chain_id = "neutron-1"
+prefix = "neutron"	
+lcd = "https://lcd-neutron.whispernode.com/"
+
+[chains.osmosis]
+name = "Osmosis"
+chain_id = "osmosis-1"
+prefix = "osmo"
+lcd = "https://osmosis-api.polkachu.com/"
+
+[chains.terra]
+name = "Terra"
+chain_id = "phoenix-1"
+prefix = "terra"
+lcd = "https://terra-rest.publicnode.com/"
+
+[chains.stargaze]
+name = "Stargaze"
+chain_id = "stargaze-1"
+prefix = "stars"
+lcd = "https://stargaze-api.polkachu.com/"
+
+[chains.cosmos_hub]
+name = "Cosmos Hub"
+chain_id = "cosmoshub-4"
+prefix = "cosmos"
+lcd = "https://lcd-cosmoshub.whispernode.com/"
+
+[chains.stride]
+name = "Stride"
+chain_id = "stride-1"
+prefix = "stride"
+lcd = "https://lcd-stride.whispernode.com/"
+
+[paths.neutron-1]
+osmosis-1 = "channel-10"
+phoenix-1 = "channel-25"
+stargaze-1 = "channel-18"
+cosmoshub-4 = "channel-1"
+stride-1 = "channel-8"
+
+[paths.osmosis-1]
+neutron-1 = "channel-874"
+phoenix-1 = "channel-251"
+stargaze-1 = "channel-75"
+cosmoshub-4 = "channel-0"
+stride-1 = "channel-326"
+
+[paths.phoenix-1]
+neutron-1 = "channel-229"
+osmosis-1 = "channel-1"
+stargaze-1 = "channel-324"
+cosmoshub-4 = "channel-0"
+stride-1 = "channel-46"
+
+[paths.stargaze-1]
+neutron-1 = "channel-191"
+osmosis-1 = "channel-0"
+phoenix-1 = "channel-266"
+cosmoshub-4 = "channel-239"
+stride-1 = "channel-106"
+
+[paths.cosmoshub-4]
+neutron-1 = "channel-569"
+osmosis-1 = "channel-141"
+phoenix-1 = "channel-339"
+stargaze-1 = "channel-730"
+stride-1 = "channel-391"
+
+[paths.stride-1]
+neutron-1 = "channel-123"
+osmosis-1 = "channel-5"
+phoenix-1 = "channel-52"
+stargaze-1 = "channel-19"
+cosmoshub-4 = "channel-0"
