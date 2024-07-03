@@ -1,6 +1,6 @@
 # TODO: Convert to table
 denoms = ["factory/neutron1lzecpea0qxw5xae92xkm3vaddeszr278k7w20c/dAsset", "factory/neutron1lzecpea0qxw5xae92xkm3vaddeszr278k7w20c/lAsset"]
-denoms_source = "neutron-1"
+denoms_source = "neutron"
 
 [chains.neutron]
 name = "Neutron"

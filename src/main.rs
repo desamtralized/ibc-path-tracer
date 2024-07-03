@@ -46,13 +46,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("");
 
     // Load the balances for each chain based on the address_map
+    let mut total_balances: HashMap<String, u128> = HashMap::new();
     for (chain_name, address) in address_map.into_iter() {
         let chain_config: HashMap<String, config::Value> =
             config.get_table(&format!("chains.{}", chain_name)).unwrap();
-        let result = load_chain_balances(&chain_config, &address)?;
-        if result.balances.len() == 0 {
-            println!("No balances found for chain {}", chain_name);
-        }
+        let _ = load_chain_balances(&chain_config, &address, &mut total_balances)?;
+    }
+
+    // Print the total balances
+    println!("Total balances:");
+    for (denom, amount) in total_balances.iter() {
+        println!("{}, {}", denom, amount);
     }
 
     Ok(())
@@ -70,6 +74,7 @@ fn get_config() -> Result<Config, Box<dyn Error>> {
 fn load_chain_balances(
     chain_config: &HashMap<String, config::Value>,
     address: &str,
+    total_balances: &mut HashMap<String, u128>,
 ) -> Result<BalancesResponse, Box<dyn Error>> {
     let balances_path = "cosmos/bank/v1beta1/balances/";
     let lcd_url = chain_config
@@ -80,19 +85,14 @@ fn load_chain_balances(
         .unwrap();
     let url = format!("{}/{}/{}", lcd_url, balances_path, address);
     let response = reqwest::blocking::get(&url)?.json::<BalancesResponse>()?;
-    let mut ibc_denoms: Vec<&Balance> = Vec::new();
-    response.balances.iter().for_each(|balance| {
-        if balance.denom.starts_with("ibc/") {
-            ibc_denoms.push(balance);
-        }
-    });
-    let _ = trace_denoms_path(ibc_denoms, chain_config);
+    let _ = trace_denoms_path(&response.balances, chain_config, total_balances);
     Ok(response)
 }
 
 fn trace_denoms_path(
-    balances: Vec<&Balance>,
+    balances: &Vec<Balance>,
     chain_config: &HashMap<String, config::Value>,
+    total_balances: &mut HashMap<String, u128>,
 ) -> Result<(), Box<dyn Error>> {
     let trace_path = "ibc/apps/transfer/v1/denom_traces/";
     let chain_name = chain_config
@@ -120,22 +120,61 @@ fn trace_denoms_path(
         let denom = balance.denom.clone();
         let ibc_hash = denom.split("/").last().unwrap();
         let url = format!("{}/{}/{}", lcd_url, trace_path, ibc_hash);
-        let response = reqwest::blocking::get(&url)
-            .unwrap()
-            .json::<DenomTraceResponse>()
-            .unwrap();
-        let base_denom = &response.denom_trace.base_denom;
-        if allowed_denoms.contains(base_denom) {
-            let amount = balance.amount.clone();
-            let path = get_route_array_by_path(&response.denom_trace.path, chain_config);
+        // if is IBC denom, get the denom trace otherwise just print the balance
+        if balance.denom.contains("ibc") {
+            let response = reqwest::blocking::get(&url)
+                .unwrap()
+                .json::<DenomTraceResponse>()
+                .unwrap();
+            let base_denom = &response.denom_trace.base_denom;
+            if allowed_denoms.contains(base_denom) {
+                let amount = balance.amount.clone();
+                let path = get_route_array_by_path(&response.denom_trace.path, chain_config);
+                if chain_name_printed == false {
+                    println!("{}", chain_name);
+                    chain_name_printed = true;
+                }
+                let formatted_path = format!("[{}]", path.join(", "));
+                println!("{}, {}, {}, {}", denom, base_denom, amount, formatted_path);
+
+                // Update the total balances
+                let amount = amount.parse::<u128>().unwrap();
+                let total_balance = total_balances.get(base_denom).unwrap_or(&0);
+                let new_total_balance = total_balance + amount;
+                total_balances.insert(base_denom.clone(), new_total_balance);
+            }
+        } else if allowed_denoms.contains(&denom) {
             if chain_name_printed == false {
                 println!("{}", chain_name);
                 chain_name_printed = true;
             }
-            println!("{}, {}, {}, {:?}", denom, base_denom, amount, path);
+            let path = vec![chain_name.clone().to_lowercase()];
+            let formatted_path = format!("[{}]", path.join(", "));
+            println!("{}, {}, {}, {}", denom, denom, balance.amount, formatted_path);
+
+            // Update the total balances
+            let amount = balance.amount.parse::<u128>().unwrap();
+            let total_balance = total_balances.get(&denom).unwrap_or(&0);
+            let new_total_balance = total_balance + amount;
+            total_balances.insert(denom.clone(), new_total_balance);
         }
+        
     });
     Ok(())
+}
+
+fn get_chain_name_by_chain_id(chain_id: &str) -> Option<String> {
+    // Load the config file
+    let config = &get_config().unwrap();
+    let chains = config.get_table("chains").unwrap();
+    for (chain_name, chain_config) in chains.iter() {
+        let chain_config = chain_config.clone().into_table().unwrap();
+        let chain_id_config = chain_config.get("chain_id").unwrap().clone().into_string().unwrap();
+        if chain_id.eq(&chain_id_config) {
+            return Some(chain_name.clone());
+        }
+    }
+    None
 }
 
 /// Path is a string with format transfer/channel-25/transfer/channel-1/transfer/channel-874,
@@ -163,8 +202,8 @@ fn get_route_array_by_path(
         .into_string()
         .unwrap();
     let paths = config.get_table("paths").unwrap();
-    let source_chain_id = config.get_string("denoms_source").unwrap();
-    route_array.push(source_chain_id.clone());
+    let source_chain = config.get_string("denoms_source").unwrap();
+    route_array.push(source_chain.clone());
 
     // Iterate over the paths.chain-id and search for the channel-id that matches the chain-id
     for channel in channels.iter().rev() {
@@ -174,7 +213,8 @@ fn get_route_array_by_path(
                 let value = value.clone().into_string().unwrap();
                 if channel.eq(&value) && key.eq(&chain_id) {
                     chain_id = path_chain_id.clone();
-                    route_array.push(path_chain_id.clone());
+                    let chain_name = get_chain_name_by_chain_id(&chain_id).unwrap();
+                    route_array.push(chain_name);
                 }
             }
         }
