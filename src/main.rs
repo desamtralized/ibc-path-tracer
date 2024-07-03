@@ -3,7 +3,6 @@ use config::{Config, File};
 use ibc_tokens_path_tracer::types::{BalancesResponse, DenomTraceResponse};
 use std::collections::HashMap;
 use std::error::Error;
-use std::hash::Hash;
 use std::io::{self, Write};
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -43,6 +42,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     });
+
+    println!("");
 
     // Load the balances for each chain based on the address_map
     for (chain_name, address) in address_map.into_iter() {
@@ -106,7 +107,6 @@ fn trace_denoms_path(
         .clone()
         .into_string()
         .unwrap();
-    println!("{}:", chain_name);
     let config = &get_config()?;
     let allowed_denoms: Vec<String> = config
         .get_array("denoms")
@@ -114,6 +114,8 @@ fn trace_denoms_path(
         .iter()
         .map(|value| value.clone().into_string().unwrap())
         .collect();
+
+    let mut chain_name_printed = false;
     denoms.iter().for_each(|denom| {
         let ibc_hash = denom.split("/").last().unwrap();
         let url = format!("{}/{}/{}", lcd_url, trace_path, ibc_hash);
@@ -121,9 +123,14 @@ fn trace_denoms_path(
             .unwrap()
             .json::<DenomTraceResponse>()
             .unwrap();
-        if allowed_denoms.contains(&response.denom_trace.base_denom) {
+        let base_denom = &response.denom_trace.base_denom;
+        if allowed_denoms.contains(base_denom) {
             let path = get_route_array_by_path(&response.denom_trace.path, chain_config);
-            println!("Path for denom: {} {:?}", denom, path);
+            if chain_name_printed == false {
+                println!("{}", chain_name);
+                chain_name_printed = true;
+            }
+            println!("{}, {}, {:?}", denom, base_denom, path);
         }
     });
     Ok(())
