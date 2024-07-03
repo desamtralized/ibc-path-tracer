@@ -178,8 +178,7 @@ fn get_chain_name_by_chain_id(chain_id: &str) -> Option<String> {
 }
 
 /// Path is a string with format transfer/channel-25/transfer/channel-1/transfer/channel-874,
-/// we should extract the channels in the reverse order and match with the value from the config file to return the
-/// chain name
+/// we should extract the channels in the reverse order and match with the chain_name 
 fn get_route_array_by_path(
     path: &str,
     chain_config: &HashMap<String, config::Value>,
