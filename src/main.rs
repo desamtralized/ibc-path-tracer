@@ -1,6 +1,6 @@
 use bech32_addr_converter::converter::any_addr_to_prefix_addr;
 use config::{Config, File};
-use ibc_tokens_path_tracer::types::{BalancesResponse, DenomTraceResponse};
+use ibc_tokens_path_tracer::types::{Balance, BalancesResponse, DenomTraceResponse};
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::{self, Write};
@@ -58,6 +58,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn get_config() -> Result<Config, Box<dyn Error>> {
+    let config = Config::builder()
+        .add_source(File::with_name("config"))
+        .build()
+        .unwrap();
+    Ok(config)
+}
+
 // Load the balances for a given address on a chain
 fn load_chain_balances(
     chain_config: &HashMap<String, config::Value>,
@@ -72,26 +80,18 @@ fn load_chain_balances(
         .unwrap();
     let url = format!("{}/{}/{}", lcd_url, balances_path, address);
     let response = reqwest::blocking::get(&url)?.json::<BalancesResponse>()?;
-    let mut ibc_denoms: Vec<String> = Vec::new();
+    let mut ibc_denoms: Vec<&Balance> = Vec::new();
     response.balances.iter().for_each(|balance| {
         if balance.denom.starts_with("ibc/") {
-            ibc_denoms.push(balance.denom.clone());
+            ibc_denoms.push(balance);
         }
     });
     let _ = trace_denoms_path(ibc_denoms, chain_config);
     Ok(response)
 }
 
-fn get_config() -> Result<Config, Box<dyn Error>> {
-    let config = Config::builder()
-        .add_source(File::with_name("config"))
-        .build()
-        .unwrap();
-    Ok(config)
-}
-
 fn trace_denoms_path(
-    denoms: Vec<String>,
+    balances: Vec<&Balance>,
     chain_config: &HashMap<String, config::Value>,
 ) -> Result<(), Box<dyn Error>> {
     let trace_path = "ibc/apps/transfer/v1/denom_traces/";
@@ -116,7 +116,8 @@ fn trace_denoms_path(
         .collect();
 
     let mut chain_name_printed = false;
-    denoms.iter().for_each(|denom| {
+    balances.iter().for_each(|balance| {
+        let denom = balance.denom.clone();
         let ibc_hash = denom.split("/").last().unwrap();
         let url = format!("{}/{}/{}", lcd_url, trace_path, ibc_hash);
         let response = reqwest::blocking::get(&url)
@@ -125,12 +126,13 @@ fn trace_denoms_path(
             .unwrap();
         let base_denom = &response.denom_trace.base_denom;
         if allowed_denoms.contains(base_denom) {
+            let amount = balance.amount.clone();
             let path = get_route_array_by_path(&response.denom_trace.path, chain_config);
             if chain_name_printed == false {
                 println!("{}", chain_name);
                 chain_name_printed = true;
             }
-            println!("{}, {}, {:?}", denom, base_denom, path);
+            println!("{}, {}, {}, {:?}", denom, base_denom, amount, path);
         }
     });
     Ok(())
