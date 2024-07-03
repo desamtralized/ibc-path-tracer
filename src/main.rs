@@ -1,17 +1,13 @@
-use std::error::Error;
-use std::collections::HashMap;
-use std::io::{self, Write};
 use bech32_addr_converter::converter::any_addr_to_prefix_addr;
 use config::{Config, File};
-use ibc_tokens_path_tracer::types::BalancesResponse;
+use ibc_tokens_path_tracer::types::{BalancesResponse, DenomTraceResponse};
+use std::collections::HashMap;
+use std::error::Error;
+use std::hash::Hash;
+use std::io::{self, Write};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    // Read the config file
-    let config = Config::builder()
-        .add_source(File::with_name("config"))
-        .build()
-        .unwrap();
-
+    let config = &get_config()?;
     // Prompt the user to enter the Neutron address
     print!("Please enter Neutron address: ");
     io::stdout().flush().unwrap();
@@ -48,20 +44,132 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    // Load the balances for each chain based on the address_map 
+    // Load the balances for each chain based on the address_map
     for (chain_name, address) in address_map.into_iter() {
-        let chain_config = config.get_table(&format!("chains.{}", chain_name)).unwrap();
-        let lcd_url = chain_config.get("lcd").unwrap().clone().into_string().unwrap();
-        let _ = load_chain_balances(&lcd_url, &address)?;
+        let chain_config: HashMap<String, config::Value> =
+            config.get_table(&format!("chains.{}", chain_name)).unwrap();
+        let result = load_chain_balances(&chain_config, &address)?;
+        if result.balances.len() == 0 {
+            println!("No balances found for chain {}", chain_name);
+        }
     }
 
     Ok(())
 }
 
-fn load_chain_balances(lcd_url: &str, address: &str) -> Result<BalancesResponse, Box<dyn Error>> {
+// Load the balances for a given address on a chain
+fn load_chain_balances(
+    chain_config: &HashMap<String, config::Value>,
+    address: &str,
+) -> Result<BalancesResponse, Box<dyn Error>> {
     let balances_path = "cosmos/bank/v1beta1/balances/";
+    let lcd_url = chain_config
+        .get("lcd")
+        .unwrap()
+        .clone()
+        .into_string()
+        .unwrap();
     let url = format!("{}/{}/{}", lcd_url, balances_path, address);
     let response = reqwest::blocking::get(&url)?.json::<BalancesResponse>()?;
-    println!("{:?}", response);
+    let mut ibc_denoms: Vec<String> = Vec::new();
+    response.balances.iter().for_each(|balance| {
+        if balance.denom.starts_with("ibc/") {
+            ibc_denoms.push(balance.denom.clone());
+        }
+    });
+    let _ = trace_denoms_path(ibc_denoms, chain_config);
     Ok(response)
+}
+
+fn get_config() -> Result<Config, Box<dyn Error>> {
+    let config = Config::builder()
+        .add_source(File::with_name("config"))
+        .build()
+        .unwrap();
+    Ok(config)
+}
+
+fn trace_denoms_path(
+    denoms: Vec<String>,
+    chain_config: &HashMap<String, config::Value>,
+) -> Result<(), Box<dyn Error>> {
+    let trace_path = "ibc/apps/transfer/v1/denom_traces/";
+    let chain_name = chain_config
+        .get("name")
+        .unwrap()
+        .clone()
+        .into_string()
+        .unwrap();
+    let lcd_url = chain_config
+        .get("lcd")
+        .unwrap()
+        .clone()
+        .into_string()
+        .unwrap();
+    println!("{}:", chain_name);
+    let config = &get_config()?;
+    let allowed_denoms: Vec<String> = config
+        .get_array("denoms")
+        .unwrap()
+        .iter()
+        .map(|value| value.clone().into_string().unwrap())
+        .collect();
+    denoms.iter().for_each(|denom| {
+        let ibc_hash = denom.split("/").last().unwrap();
+        let url = format!("{}/{}/{}", lcd_url, trace_path, ibc_hash);
+        let response = reqwest::blocking::get(&url)
+            .unwrap()
+            .json::<DenomTraceResponse>()
+            .unwrap();
+        if allowed_denoms.contains(&response.denom_trace.base_denom) {
+            let path = get_route_array_by_path(&response.denom_trace.path, chain_config);
+            println!("Path for denom: {} {:?}", denom, path);
+        }
+    });
+    Ok(())
+}
+
+/// Path is a string with format transfer/channel-25/transfer/channel-1/transfer/channel-874,
+/// we should extract the channels in the reverse order and match with the value from the config file to return the
+/// chain name
+fn get_route_array_by_path(
+    path: &str,
+    chain_config: &HashMap<String, config::Value>,
+) -> Vec<String> {
+    let mut route_array: Vec<String> = Vec::new();
+    let channels: Vec<&str> = path.split("/").collect();
+    let channels = channels
+        .iter()
+        .filter(|&channel| channel.starts_with("channel-"))
+        .collect::<Vec<_>>();
+    let channels: Vec<String> = channels
+        .iter()
+        .map(|&channel| channel.to_string())
+        .collect();
+    let config = &get_config().unwrap();
+    let mut chain_id = chain_config
+        .get("chain_id")
+        .unwrap()
+        .clone()
+        .into_string()
+        .unwrap();
+    let paths = config.get_table("paths").unwrap();
+    let source_chain_id = config.get_string("denoms_source").unwrap();
+    route_array.push(source_chain_id.clone());
+
+    // Iterate over the paths.chain-id and search for the channel-id that matches the chain-id
+    for channel in channels.iter().rev() {
+        for (path_chain_id, path) in paths.iter() {
+            let path_table = path.clone().into_table().unwrap();
+            for (key, value) in path_table.iter() {
+                let value = value.clone().into_string().unwrap();
+                if channel.eq(&value) && key.eq(&chain_id) {
+                    chain_id = path_chain_id.clone();
+                    route_array.push(path_chain_id.clone());
+                }
+            }
+        }
+    }
+
+    route_array
 }

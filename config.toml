@@ -1,44 +1,42 @@
+# TODO: Convert to table
+denoms = ["factory/neutron1lzecpea0qxw5xae92xkm3vaddeszr278k7w20c/dAsset", "factory/neutron1lzecpea0qxw5xae92xkm3vaddeszr278k7w20c/lAsset"]
+denoms_source = "neutron-1"
+
 [chains.neutron]
 name = "Neutron"
 chain_id = "neutron-1"
 prefix = "neutron"	
 lcd = "https://lcd-neutron.whispernode.com/"
-denoms = ["factory/neutron1lzecpea0qxw5xae92xkm3vaddeszr278k7w20c/dAsset", "factory/neutron1lzecpea0qxw5xae92xkm3vaddeszr278k7w20c/lAsset"]
 
 [chains.osmosis]
 name = "Osmosis"
 chain_id = "osmosis-1"
 prefix = "osmo"
 lcd = "https://osmosis-api.polkachu.com/"
-denoms = []
 
 [chains.terra]
 name = "Terra"
 chain_id = "phoenix-1"
 prefix = "terra"
 lcd = "https://terra-rest.publicnode.com/"
-denoms = []
 
 [chains.stargaze]
 name = "Stargaze"
 chain_id = "stargaze-1"
 prefix = "stars"
 lcd = "https://stargaze-api.polkachu.com/"
-denoms = []
 
 [chains.cosmos_hub]
 name = "Cosmos Hub"
 chain_id = "cosmoshub-4"
 prefix = "cosmos"
 lcd = "https://lcd-cosmoshub.whispernode.com/"
-denoms = []
 
 [chains.stride]
 name = "Stride"
 chain_id = "stride-1"
 prefix = "stride"
 lcd = "https://lcd-stride.whispernode.com/"
-denoms = []
 
 [paths.neutron-1]
 osmosis-1 = "channel-10"

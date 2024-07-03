@@ -2,18 +2,28 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct Balance {
-    denom: String,
-    amount: String,
+    pub denom: String,
+    pub amount: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Pagination {
-    next_key: Option<String>,
-    total: String,
+    pub next_key: Option<String>,
+    pub total: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct BalancesResponse {
-    balances: Vec<Balance>,
-    pagination: Pagination,
+    pub balances: Vec<Balance>,
+    pub pagination: Pagination,
+}
+#[derive(Debug, Deserialize)]
+pub struct DenomTraceResponse {
+    pub denom_trace: DenomTrace,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DenomTrace {
+    pub path: String,
+    pub base_denom: String,
 }
